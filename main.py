@@ -2,7 +2,7 @@ import sys
 from inception_blocks_v2 import *
 from fr_utils import *
 from pathlib import Path
-import cv2 1as cv
+import cv2 as cv
 from mtcnn.mtcnn import MTCNN
 import numpy as np
 from tensorflow.keras import backend as K
