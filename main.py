@@ -2,12 +2,16 @@ import sys
 from inception_blocks_v2 import *
 from fr_utils import *
 from pathlib import Path
-import cv2 as cv
+import cv2 1as cv
 from mtcnn.mtcnn import MTCNN
 import numpy as np
 from tensorflow.keras import backend as K
-import argparse
+# import argparse
 import pickle
+import itertools
+
+
+# from concurrent.futures import ProcessPoolExecutor
 
 
 def triplet_loss(y_true, y_pred, alpha=0.2):
@@ -30,31 +34,38 @@ def triplet_loss(y_true, y_pred, alpha=0.2):
     return loss
 
 
+def show_register():
+    print('\n--------------------------------------------REGISTER--------------------------------------------')
+    [print(key, '-' * (30 - len(key)), value) for key, value in register.items()]
+
+
 def face_detector():
-    print('loading FD - ', K.image_data_format())
+    if CNN_DETECTOR == True:
+        K.set_image_data_format('channels_last')
+        model = MTCNN()
+        return model
+
+    model = cv.CascadeClassifier(str(Path(cv.data.haarcascades) / 'haarcascade_frontalface_default.xml'))
     model = MTCNN()
-    print('Done loading FD - ', K.image_data_format())
     return model
 
 
 def face_recognizer():
-    print('loading FR - ', K.image_data_format())
     K.set_image_data_format('channels_first')
     model = faceRecoModel(input_shape=(3, 96, 96))
     model.compile(optimizer='adam', loss=triplet_loss, metrics=['accuracy'])
     load_weights_from_FaceNet(model)
-    print('Done loading FR - ', K.image_data_format())
     return model
 
 
-def get_faces_mtcnn(image, detector, f=6):
+def get_faces_mtcnn(image, f=6):
     shape = image.shape
     face_points = detector.detect_faces(image)
     faces = np.empty((len(face_points), 96, 96, 3), dtype='uint8')
     for i, pt in enumerate(face_points):
         x, y, w, h = pt['box']
-        ZX = int(w/f)
-        ZY = int(h/f)
+        ZX = int(w / f)
+        ZY = int(h / f)
         xa = max(x - ZX, 0)
         xb = min(x + w + ZX, shape[1])
         ya = max(y - ZY, 0)
@@ -64,14 +75,15 @@ def get_faces_mtcnn(image, detector, f=6):
         faces[i] = face
     return faces
 
-def get_faces(image, classifier, f=6):
+
+def get_faces(image, f=6):
     shape = image.shape
-    face_points = classifier.detectMultiScale(image)
+    face_points = detector.detectMultiScale(image)
     faces = np.empty((len(face_points), 96, 96, 3), dtype='uint8')
     for i, pt in enumerate(face_points):
         x, y, w, h = pt
-        ZX = int(w/f)
-        ZY = int(h/f)
+        ZX = int(w / f)
+        ZY = int(h / f)
         xa = max(x - ZX, 0)
         xb = min(x + w + ZX, shape[1])
         ya = max(y - ZY, 0)
@@ -82,127 +94,201 @@ def get_faces(image, classifier, f=6):
     return faces
 
 
-def get_dist(image1, image2, database, model):
-    """
-    Function that verifies if the person on the "image_path" image is "identity".
-
-    Arguments:
-    image_path -- path to an image
-    identity -- string, name of the person you'd like to verify the identity. Has to be an employee who works in the office.
-    database -- python dictionary mapping names of allowed people's names (strings) to their encodings (vectors).
-    model -- your Inception model instance in Keras
-
-    Returns:
-    dist -- distance between the image_path and the image of "identity" in the database.
-    door_open -- True, if the door should open. False otherwise.
-    """
-    # K.set_image_data_format('channels_first')
-    encoding1 = img_to_encoding(image1, model)
-    encoding2 = img_to_encoding(image2, model)
-    dist = np.linalg.norm(np.subtract(encoding1, encoding2))
-#     dist = 1 - np.dot(encoding1.reshape(-1), encoding2.reshape(-1))
-    if dist < 0.7:
-        print('Welcome in!')
-        door_open = True
+def get_encoding(image, get_face=False):
+    if CNN_DETECTOR == True:
+        faces = get_faces_mtcnn(image, f=6)
     else:
-        print('Please go away')
-        door_open = False
-
-    return dist, door_open
-
-
-def check(image, model, database, threshold=0.7):
-    min_dist = threshold
-    candidate = None
-    encoding = img_to_encoding(image, model)
-    for name, against in database.items():
-        dist = np.linalg.norm(np.subtract(encoding, against))
-#         dist = 1 - np.dot(encoding1.reshape(-1), encoding2.reshape(-1))
-
-    if dist < min_dist:
-        min_dist = dist
-        candidate = name
-            
-    return name, min_dist
+        faces = get_faces(image, f=6)
+    encoding = img_to_encoding(faces[0], recognizer)[0]
+    if get_face == True:
+        return encoding, faces[0]
+    return encoding
 
 
+def check(image, threshold=0.7):
+    global register
+    encodings = []
+    candidates = {}
+    min_dist = threshold * 4
+    image_fliped = cv.flip(image, 1)
+    encodings.append(get_encoding(image))
+    encodings.append(get_encoding(image_fliped))
+    for name, against in db.items():
+        def compute(enc1, enc2):
+            return np.linalg.norm(np.subtract(enc1, enc2))
 
-def check_up(image, model, database, threshold=0.7):
-    min_dist = threshold
-    candidates = []
-    encoding = img_to_encoding(image, model)
-    for name, againsts in database.items():
-        dist = np.linalg.norm(np.subtract(encoding, against))
-#         dist = 1 - np.dot(encoding1.reshape(-1), encoding2.reshape(-1))
+        #             dist = 1 - np.dot(encoding1.reshape(-1), encoding2.reshape(-1))
 
-    if dist < min_dist:
-        min_dist = dist
-        candidate = name
-            
-    return name, min_dist
+        # Todo: Add ProcessPoolExecutor
+        dists = np.empty(4)
+        pairs = itertools.product(encodings, against)
+        for i, (enc1, enc2) in enumerate(pairs):
+            dists[i] = compute(enc1, enc2)
+        print(name, dists)
+        if np.sum(dists < threshold) >= 2:
+            candidates[name] = np.sum(dists)
 
-    
-def face_recognizer():
-    K.set_image_data_format('channels_first')
-    model = faceRecoModel(input_shape=(3, 96, 96))
-    model.compile(optimizer='adam', loss=triplet_loss, metrics=['accuracy'])
-    load_weights_from_FaceNet(model)
-    return model
+    if len(candidates) == 0:
+        output('No such person exist!')
+    else:
+        candidate = min(candidates, key=candidates.get)
+        output(f'Hi {candidate}')
+        register[candidate] = 1
 
 
 def output(text):
     print(f'\n\n~~~~ {text}')
 
-  
-def db():  
-    global db    
+
+def load_models():
+    global detector
+    global recognizer
+
+    try:
+        detector
+    except:
+        print('Loading ...')
+        detector = face_detector()
+        print('Loading ...')
+        recognizer = face_recognizer()
+
+
+def save_database():
+    import pickle
+    try:
+        if 'database' not in os.listdir():
+            os.mkdir('database')
+        filename = 'database.pickle'
+        with open('database/' + filename, 'wb') as handle:
+            pickle.dump(db, handle)
+        print('Done!')
+    except Exception as e:
+        print(e)
+
+
+def get_image_from_cam():
+    print('Starting Camera. Press "c" to capture')
+    cap = cv.VideoCapture(0)
+    if not cap.isOpened():
+        print('Cannot Open Camera')
     while True:
-        print('='*120)
-        try:
-            output('Current database:')
-            print(db.keys())
-        except:
-            output('No database found!')
-        print()
-        print('Add                   - enter(1)')
-        print('Delete                - enter(2)')
-        print('Go back to main menu  - enter(b)')
-        print('Exit the program      - enter(e)')
+        # Capture frame-by-frame
+        ret, frame = cap.read()
+
+        # if frame is read correctly ret is True
+        if not ret:
+            output("Can't receive frame. Existing")
+            break
+        # Display the frame
+        cv.imshow('frame', frame)
+        if cv.waitKey(1) == ord('c'):
+            break
+    # When everything done, release the capture
+    cap.release()
+    cv.destroyAllWindows()
+    return frame[..., ::-1]
+
+
+def get_image_from_path():
+    path = input('Enter image path (with extension): ')
+    image = cv.imread(path, 1)
+    if type(image) != type(None):
+        image = image[..., ::-1]
+    return image
+
+
+def add_to_db(name, image):
+    global register, db
+    try:
+        encodings = []
+        image_fliped = cv.flip(image, 1)
+        encoding, face = get_encoding(image, get_face=True)
+        cv.imshow(name, face[:, :, ::-1])
+        cv.waitKey(0)
+        cv.destroyAllWindows()
+        encodings.append(encoding)
+
+        encoding = get_encoding(image_fliped)
+        encodings.append(encoding)
+
+        db[name] = encodings
+        register.update({name: 0})
+        output('Done!')
+    except Exception as e:
+        print(f'Invalid path! {e}')
+
+
+def attendance():
+    load_models()
+    while True:
+        print('=' * 120)
+        print('Input image path for a single attendance checkup - enter(1)')
+        print('Start webcam for live attendance checkup         - enter(2)')
+        print('Go back to main Menu                             - enter(b)')
+        print('Exit the program                                 - enter(e)')
         inp = input('Action: ')
-        
+
         if inp == '1':
-            print('='*120)
+            image = get_image_from_path()
+            if type(image) == type(None):
+                output('Invalid path!')
+                continue
+            check(image, threshold=0.7)
+        elif inp == '2':
+            image = get_image_from_cam()[..., ::-1]
+            check(image, threshold=0.7)
+        elif inp == 'b':
+            main_menu()
+        elif inp == 'e':
+            sys.exit('Program exited')
+        else:
+            output('Invalid input!')
+
+
+def db_util():
+    global db
+    global register
+
+    while True:
+        print('=' * 120)
+        output('Current database: ')
+        print(list(db.keys()))
+        print()
+        print('Add                  - enter(1)')
+        print('Delete               - enter(2)')
+        print('Go back to main menu - enter(b)')
+        print('Exit the program     - enter(e)')
+        inp = input('Action: ')
+
+        if inp == '1':
+            load_models()
+
+            print('=' * 120)
             print('Open webcam          - enter(1)')
             print('Provide image path   - enter(2)')
             print('Go back to main menu - enter(b)')
-            inp = input('Action: ')            
-            if inp == '1':                
-                print('start webcam')
+            inp = input('Action: ')
+            if inp == '1':
+                name = input('Enter name: ')
+                image = get_image_from_cam()
+                add_to_db(name, image)
             elif inp == '2':
-                print('enter input in following format - {name}{single-space}{path1}{single-space}{path2}{more images} (following the same pattern, if available)')
-                print('Example: xyz /home/images/img1.jpg /home/images/img2.jpg /home/images/img3.jpg')
-                inp = input('Enter: ')
-                data = inp.split()
-                try:
-                    for path in data[1:]:
-                        encodings = []
-                        img = cv.imread(path)[:, :, ::-1]
-                        img_fliped = cv.flip(img, 1)                        
-                        encodings.append(img_to_encoding(img, model))
-                        encodings.append(img_to_encoding(img_fliped, model))
-                    db[data[0]] = encodings
-                    output('Done!')
-                except:
-                    output('Invalid input!')
+                name = input('Enter name: ')
+                image = get_image_from_path()
+                if type(image) == type(None):
+                    output('Invalid path!')
+                    continue
+                add_to_db(name, image)
             elif inp == 'b':
                 main_menu()
             else:
                 output('Invalid input!')
-                    
+
         elif inp == '2':
             inp = input('Enter name to delete: ')
             try:
-                del(db[inp])
+                del (db[inp])
+                del register[inp]
                 output(f'Removed {inp}')
             except:
                 output('No such name exist!')
@@ -214,71 +300,50 @@ def db():
             output('Invalid input!')
 
 
-def attendance():
-    global detector
-    global recognizer
-
-    try:
-        detector
-    except:
-        print('Loading ...')
-        detector = cv.CascadeClassifier(str(Path(cv.data.haarcascades) / 'haarcascade_frontalface_default.xml'))
-
-        recognizer = recognizer = face_recognizer() 
-
+def main_menu():
     while True:
-        print('='*120)
-        print('Input image path for a single attendance checkup - enter(1)')
-        print('Start webcam for live attendance                 - enter(2)')
-        print('Go back to main Menu                             - enter(b)')
-        print('Exit the program - enter(e)')
+        print('=' * 120)
+        print('Database                  - enter(1)')
+        print('Take attendance           - enter(2)')
+        print('show register             - enter(r)')
+        print('Save the database to disk - enter(s)')
+        print('Exit the program          - enter(e)')
         inp = input('Action: ')
 
         if inp == '1':
-            path = input('Enter image path (with extension): ')
-            img = cv.imread(path, 1)
-            if img == None:
-                output('Invalid path!')
-                continue
-            img = img[...,::-1]
-            check(img, recognizer, db, threshold=0.7)
-        elif inp == '2':
-                print('start webcam')
-        elif inp == 'b':
-            main_menu()
-        elif inp == 'e':
-            sys.exit('Program exited')
-        else:
-            output('Invalid input!')
-    
-            
-def main_menu():    
-    while True:
-        print('='*120)
-        print('Database         - enter(1)')
-        print('Take attendance  - enter(2)')
-        print('Exit the program - enter(e)')
-        inp = input('Action: ')
-
-        if inp == '1':
-            db()
+            db_util()
         elif inp == '2':
             attendance()
         elif inp == 'e':
             sys.exit('Program exited')
+        elif inp == 'r':
+            print(show_register())
+        elif inp == 's':
+            save_database()
         else:
             output('Invalid input!')
-        
-        
+
+
 def load_database():
     global db
-    filename = 'database'
+    global register
+    filename = 'database.pickle'
     try:
-        with open(str('database' / filename), 'rb') as infile:
-            db = pickle.load(infile)
+        with open('database/' + filename, 'rb') as handle:
+            db = pickle.load(handle)
+        register = {k: 0 for k in db.keys()}
     except:
         output('No database found!')
-        
+        db = {}
+        register = {}
+
+
 if __name__ == '__main__':
-    load_database()
-    main_menu()
+    while True:
+        try:
+            CNN_DETECTOR = True
+            load_database()
+            main_menu()
+        except Exception as e:
+            print(e)
+            continue
