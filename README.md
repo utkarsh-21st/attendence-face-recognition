@@ -17,7 +17,7 @@ How is attendence taken?
 - A face-detection algorithm attempts to find a face in an image
 - Detected-face is then carried out to the face-recognition model which calculates an embedding for that face.
 - Eucledian distance is calculated between this embedding against all stored embeddings in database.
-- The minmum all distances is chosen if it also less than a certain threshold.
+- The minmum of all distances is chosen if it is also less than a certain threshold.
 
 **Face Detection** algorithm used here is MTCNN. 
 **Face Recognition** algorithm used here is a  pre-trained model, keras version of [OpenFace](https://github.com/cmusatyalab/openface "OpenFace").
