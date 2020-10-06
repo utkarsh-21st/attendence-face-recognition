@@ -9,6 +9,8 @@ The other approach is whats called "one-shot-learning", which is what has been u
 
 A convinient interface is also provided to manage the system:
 
+![interface](https://github.com/utkarsh-21st/attendence-face-recognition/blob/master/sample%20images/sample1.png "interface")![interace](https://github.com/utkarsh-21st/attendence-face-recognition/blob/master/sample%20images/sample3.png "interace")![interface](https://github.com/utkarsh-21st/attendence-face-recognition/blob/master/sample%20images/sample4.png "interface")
+
 How is attendence taken?
 - A database of all identities can be created by using the interface.
 - A face-detection algorithm attempts to find a face in an image
