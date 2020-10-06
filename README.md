@@ -8,7 +8,6 @@ One way is to first gather some images of all the identities and train a classif
 The other approach is whats called "one-shot-learning", which is what has been used here. Unlike the previous approach, this algorithm once trained is all there is, no need to retrain in case of nay change in identities. Moreover, it only needs one or a few images of each identity. Given an image, it calculates, using siamese network, a low dimensional feature-vector for that image called embedding. And the model is designed such that the Euclidean distance between two embeddings quantifies how similar two images are (whether they belong to the same identities).
 
 A convinient interface is also provided to manage the system:
-![interface](https://github.com/utkarsh-21st/attendence-face-recognition/blob/master/sample%20images/sample1.png "interface")![interace](https://github.com/utkarsh-21st/attendence-face-recognition/blob/master/sample%20images/sample3.png "interace")![interface](https://github.com/utkarsh-21st/attendence-face-recognition/blob/master/sample%20images/sample4.png "interface")
 
 How is attendence taken?
 - A database of all identities can be created by using the interface.
