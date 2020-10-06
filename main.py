@@ -6,7 +6,6 @@ import cv2 as cv
 from mtcnn.mtcnn import MTCNN
 import numpy as np
 from tensorflow.keras import backend as K
-# import argparse
 import pickle
 import itertools
 
