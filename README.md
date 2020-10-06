@@ -7,9 +7,8 @@ One way is to first gather some images of all the identities and train a classif
 
 The other approach is whats called "one-shot-learning", which is what has been used here. Unlike the previous approach, this algorithm once trained is all there is, no need to retrain in case of nay change in identities. Moreover, it only needs one or a few images of each identity. Given an image, it calculates, using siamese network, a low dimensional feature-vector for that image called embedding. And the model is designed such that the Euclidean distance between two embeddings quantifies how similar two images are (whether they belong to the same identities).
 
-A convinient interface is also provided to manage the system (some snapshots):
+A convinient interface is also provided to manage the system:
 ![interface](https://github.com/utkarsh-21st/attendence-face-recognition/blob/master/sample%20images/sample1.png "interface")![interace](https://github.com/utkarsh-21st/attendence-face-recognition/blob/master/sample%20images/sample3.png "interace")![interface](https://github.com/utkarsh-21st/attendence-face-recognition/blob/master/sample%20images/sample4.png "interface")
-
 
 How is attendence taken?
 - A database of all identities can be created by using the interface.
@@ -17,6 +16,21 @@ How is attendence taken?
 - Detected-face is then carried out to the face-recognition model which calculates an embedding for that face.
 - Eucledian distance is calculated between this embedding against all stored embeddings in database.
 - The minmum of all distances is chosen if it is also less than a certain threshold.
+
+#### How to run?
+Install dependencies: See [requirements.txt](https://github.com/utkarsh-21st/attendence-face-recognition/blob/master/requirements.txt "requirements.txt")
+##### Note: Ensure that your system has tensorflow with GPU support.
+- Clone this repository:
+```shell
+git clone https://github.com/utkarsh-21st/attendence-face-recognition.git
+cd attendence-face-recognition
+python main.py
+```
+
+While the system is ready-to-use, it isn't still robust enough to deploy it in real-life.
+It can perhaps be further impoved by using multiple images per person, shot at different times.
+If you are wondering what algorithm does  iPhone uses for Face Recognition: Check out [this](https://towardsdatascience.com/how-i-implemented-iphone-xs-faceid-using-deep-learning-in-python-d5dbaa128e1d "this"). It is much more sophisticated approach which also utilizes depth camera.
+
 
 **Face Detection** algorithm used here is MTCNN. 
 **Face Recognition** algorithm used here is a  pre-trained model, keras version of [OpenFace](https://github.com/cmusatyalab/openface "OpenFace").
